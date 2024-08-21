@@ -11,98 +11,87 @@ img_3 = cv2.imread('src/image3.png', 0)
 img_4 = cv2.imread('src/image4.png', 0)
 
 # 画像のリサイズ
-height = img_3.shape[0]
-width = img_3.shape[1]
-img_4 = cv2.resize(img_4, (int(width), int(height)))
+height, width = img_3.shape
+img_4 = cv2.resize(img_4, (width, height))
 
-# ガンマ補正
+# ガンマ補正関数
 def adjust_gamma(image, gamma=1.0):
     inv_gamma = 1.0 / gamma
     table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
     return cv2.LUT(image, table)
 
-# 元画像のヒストグラムを計算
-hist_img3_before = cv2.calcHist([img_3], [0], None, [256], [0, 256])
-hist_img4_before = cv2.calcHist([img_4], [0], None, [256], [0, 256])
-
-# ガンマ補正
 gamma = 1.5
 img3_gamma = adjust_gamma(img_3, gamma)
 img4_gamma = adjust_gamma(img_4, gamma)
 
-# ガンマ補正後のヒストグラムを計算
-hist_img3_after = cv2.calcHist([img3_gamma], [0], None, [256], [0, 256])
-hist_img4_after = cv2.calcHist([img4_gamma], [0], None, [256], [0, 256])
+# 特徴点の検出
+# AKAZE特徴点検出器の初期化
+akaze = cv2.AKAZE_create()
 
-# ヒストグラムと画像を並べてプロット
-plt.figure(figsize=(16, 8))
+# 特徴点と記述子を検出
+kp1, des1 = akaze.detectAndCompute(img3_gamma, None)
+kp2, des2 = akaze.detectAndCompute(img4_gamma, None)
 
-# ガンマ補正前のヒストグラム
-plt.subplot(3, 2, 1)
-plt.plot(hist_img3_before, color='blue', label='img3 before gamma')
-plt.plot(hist_img4_before, color='red', label='img4 before gamma')
-plt.title('Histogram Before Gamma Correction')
-plt.xlabel('Brightness Value')
-plt.ylabel('Frequency')
-plt.legend()
+# マッチャーの作成 (Brute Force Matcher)
+bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 
-# ガンマ補正後のヒストグラム
-plt.subplot(3, 2, 2)
-plt.plot(hist_img3_after, color='blue', label='img3 after gamma (1.5)')
-plt.plot(hist_img4_after, color='red', label='img4 after gamma (1.5)')
-plt.title('Histogram After Gamma Correction')
-plt.xlabel('Brightness Value')
-plt.ylabel('Frequency')
-plt.legend()
+# マッチングを実行
+matches = bf.match(des1, des2)
+matches = sorted(matches, key=lambda x: x.distance)
 
-# 元の画像とガンマ補正後の画像を表示
-plt.subplot(3, 2, 3)
-plt.imshow(cv2.cvtColor(img_3, cv2.COLOR_GRAY2RGB))
-plt.title('Original Image 3')
-plt.axis('off')
+# マッチング点の座標を抽出
+points1 = np.zeros((len(matches), 2), dtype=np.float32)
+points2 = np.zeros((len(matches), 2), dtype=np.float32)
 
-plt.subplot(3, 2, 4)
-plt.imshow(cv2.cvtColor(img3_gamma, cv2.COLOR_GRAY2RGB))
-plt.title('Gamma Corrected Image 3 (1.5)')
-plt.axis('off')
+for i, match in enumerate(matches):
+    points1[i, :] = kp1[match.queryIdx].pt
+    points2[i, :] = kp2[match.trainIdx].pt
 
-# 元の画像とガンマ補正後の画像を表示
-plt.subplot(3, 2, 5)
-plt.imshow(cv2.cvtColor(img_4, cv2.COLOR_GRAY2RGB))
-plt.title('Original Image 4')
-plt.axis('off')
+# ホモグラフィを計算
+H, _ = cv2.findHomography(points2, points1, cv2.RANSAC)
 
-plt.subplot(3, 2, 6)
-plt.imshow(cv2.cvtColor(img4_gamma, cv2.COLOR_GRAY2RGB))
-plt.title('Gamma Corrected Image 4 (1.5)')
-plt.axis('off')
+# 画像の変換
+transformed_img = cv2.warpPerspective(img4_gamma, H, (width, height))
 
-plt.tight_layout()
-plt.show()
+# 画像を重ね合わせ
+combined_img = cv2.addWeighted(img3_gamma, 0.5, transformed_img, 0.5, 0)
 
+# 結果をファイルに保存
+output_path = os.path.join('output', 'image.png')
+cv2.imwrite(output_path, combined_img)
 
-# # コントラスト向上
-# # 特徴点の検出
-# # harris
-# # img_3がグレースケールの場合、まずカラーに変換
-# if len(img_3.shape) == 2:  # グレースケール画像か確認
-#     img_harris = cv2.cvtColor(copy.deepcopy(img_3), cv2.COLOR_GRAY2BGR)
-# else:
-#     img_harris = copy.deepcopy(img_3)
+# 画像をカラーで読み込む (BGR形式)
+output_img = cv2.imread('output/image.png', 0)
 
-# # Harrisコーナー検出
-# img_dst = cv2.cornerHarris(img_3, 10, 3, 0.04)
+diff = cv2.absdiff(img_4, output_img)
 
-# # 結果をもとに赤色でコーナーを強調
-# img_harris[img_dst > 0.05 * img_dst.max()] = [0, 0, 255]
+# 初期値を設定
+threshold = 100
 
-# # 画像を表示 (RGB形式に変換して表示)
-# plt.imshow(cv2.cvtColor(img_harris, cv2.COLOR_BGR2RGB))
-# plt.axis('off')  # 軸を非表示にする（任意）
-# plt.show()
+# コールバック関数
+def onTrackbar(position):
+    global threshold
+    threshold = position
+    _, mask = cv2.threshold(diff, threshold, 255, cv2.THRESH_BINARY)
+    cv2.imshow("Simple Threshold", mask)
 
-# # 画像を引き算
-# diff = cv2.absdiff(img_3, img_4)
+# ウィンドウを作成
+cv2.namedWindow("Simple Threshold")
+
+# トラックバーを作成
+cv2.createTrackbar("Track", "Simple Threshold", threshold, 255, onTrackbar)
+
+# 初期の2値化結果を表示
+onTrackbar(threshold)
+
+# ループしてトラックバーの調整を待つ
+while True:
+    # Escキーを押すとループ終了
+    if cv2.waitKey(10) == 27:
+        break
+
+# ウィンドウを閉じる
+cv2.destroyAllWindows()
 
 # # 2値化
 # # 適応的二値化（平均値）
