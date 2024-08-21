@@ -1,7 +1,8 @@
 import cv2
-import os
 import numpy as np
 import matplotlib.pyplot as plt
+import copy
+import os
 
 # 画像読み込み・グレースケール
 # img_1 = cv2.imread('src/image1.png', 0)
@@ -14,43 +15,103 @@ height = img_3.shape[0]
 width = img_3.shape[1]
 img_4 = cv2.resize(img_4, (int(width), int(height)))
 
-# 2値化
-def onTrackbar(position):
-    global threshold
-    threshold = position
-# ウィンドウを作成
-cv2.namedWindow("Simple Threshold")
-cv2.namedWindow("Adaptive Mean Threshold")
-cv2.namedWindow("Adaptive Gaussian Threshold")
+# ガンマ補正
+def adjust_gamma(image, gamma=1.0):
+    inv_gamma = 1.0 / gamma
+    table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
+    return cv2.LUT(image, table)
 
-# トラックバーの初期設定
-threshold = 100
-cv2.createTrackbar("track", "Simple Threshold", threshold, 255, onTrackbar)
+# 元画像のヒストグラムを計算
+hist_img3_before = cv2.calcHist([img_3], [0], None, [256], [0, 256])
+hist_img4_before = cv2.calcHist([img_4], [0], None, [256], [0, 256])
 
-while True:
-    # 通常の閾値による二値化
-    ret, img_th_simple = cv2.threshold(img_3, threshold, 255, cv2.THRESH_BINARY)
-    
-    # 適応的二値化（平均値）
-    img_th_mean = cv2.adaptiveThreshold(img_3, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2)
-    
-    # 適応的二値化（ガウシアン）
-    img_th_gaussian = cv2.adaptiveThreshold(img_3, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+# ガンマ補正
+gamma = 1.5
+img3_gamma = adjust_gamma(img_3, gamma)
+img4_gamma = adjust_gamma(img_4, gamma)
 
-    # ウィンドウに表示
-    cv2.imshow("Simple Threshold", img_th_simple)
-    cv2.imshow("Adaptive Mean Threshold", img_th_mean)
-    cv2.imshow("Adaptive Gaussian Threshold", img_th_gaussian)
+# ガンマ補正後のヒストグラムを計算
+hist_img3_after = cv2.calcHist([img3_gamma], [0], None, [256], [0, 256])
+hist_img4_after = cv2.calcHist([img4_gamma], [0], None, [256], [0, 256])
 
-    # Escキーを押すとループ終了
-    if cv2.waitKey(10) == 27:
-        break
+# ヒストグラムと画像を並べてプロット
+plt.figure(figsize=(16, 8))
 
-cv2.destroyAllWindows()
+# ガンマ補正前のヒストグラム
+plt.subplot(3, 2, 1)
+plt.plot(hist_img3_before, color='blue', label='img3 before gamma')
+plt.plot(hist_img4_before, color='red', label='img4 before gamma')
+plt.title('Histogram Before Gamma Correction')
+plt.xlabel('Brightness Value')
+plt.ylabel('Frequency')
+plt.legend()
 
+# ガンマ補正後のヒストグラム
+plt.subplot(3, 2, 2)
+plt.plot(hist_img3_after, color='blue', label='img3 after gamma (1.5)')
+plt.plot(hist_img4_after, color='red', label='img4 after gamma (1.5)')
+plt.title('Histogram After Gamma Correction')
+plt.xlabel('Brightness Value')
+plt.ylabel('Frequency')
+plt.legend()
+
+# 元の画像とガンマ補正後の画像を表示
+plt.subplot(3, 2, 3)
+plt.imshow(cv2.cvtColor(img_3, cv2.COLOR_GRAY2RGB))
+plt.title('Original Image 3')
+plt.axis('off')
+
+plt.subplot(3, 2, 4)
+plt.imshow(cv2.cvtColor(img3_gamma, cv2.COLOR_GRAY2RGB))
+plt.title('Gamma Corrected Image 3 (1.5)')
+plt.axis('off')
+
+# 元の画像とガンマ補正後の画像を表示
+plt.subplot(3, 2, 5)
+plt.imshow(cv2.cvtColor(img_4, cv2.COLOR_GRAY2RGB))
+plt.title('Original Image 4')
+plt.axis('off')
+
+plt.subplot(3, 2, 6)
+plt.imshow(cv2.cvtColor(img4_gamma, cv2.COLOR_GRAY2RGB))
+plt.title('Gamma Corrected Image 4 (1.5)')
+plt.axis('off')
+
+plt.tight_layout()
+plt.show()
+
+
+# # コントラスト向上
+# # 特徴点の検出
+# # harris
+# # img_3がグレースケールの場合、まずカラーに変換
+# if len(img_3.shape) == 2:  # グレースケール画像か確認
+#     img_harris = cv2.cvtColor(copy.deepcopy(img_3), cv2.COLOR_GRAY2BGR)
+# else:
+#     img_harris = copy.deepcopy(img_3)
+
+# # Harrisコーナー検出
+# img_dst = cv2.cornerHarris(img_3, 10, 3, 0.04)
+
+# # 結果をもとに赤色でコーナーを強調
+# img_harris[img_dst > 0.05 * img_dst.max()] = [0, 0, 255]
+
+# # 画像を表示 (RGB形式に変換して表示)
+# plt.imshow(cv2.cvtColor(img_harris, cv2.COLOR_BGR2RGB))
+# plt.axis('off')  # 軸を非表示にする（任意）
+# plt.show()
+
+# # 画像を引き算
 # diff = cv2.absdiff(img_3, img_4)
-# diff = cv2.cvtColor(diff, cv2.COLOR_BGR2RGB)
-# plt.imshow(result)
+
+# # 2値化
+# # 適応的二値化（平均値）
+# # これがよさそうだけど、煮詰まったら確認の余地あり
+# res = cv2.adaptiveThreshold(diff, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2)
+# masked_diff = cv2.bitwise_and(diff, res)
+# # diff = cv2.cvtColor(res, cv2.COLOR_BGR2RGB)
+# plt.imshow(masked_diff, cmap='gray')
+# plt.axis('off')
 # plt.show()
 
 # # ORB検出器を初期化
