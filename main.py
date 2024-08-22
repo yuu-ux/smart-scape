@@ -1,128 +1,121 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-import copy
 import os
 
-# 画像読み込み
-img1 = cv2.imread('src/image3.png')
-img2 = cv2.imread('src/image4.png')
-
-# 画像のリサイズ
-height, width = img1.shape[:2]
-img2 = cv2.resize(img2, (width, height))
-
-# グレースケール
-gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
-gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
-
 # ガンマ補正関数
-def adjust_gamma(image, gamma=1.0):
+def adjustGamma(image, gamma):
     inv_gamma = 1.0 / gamma
     table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
     return cv2.LUT(image, table)
 
-gamma = 1.5
-img1_gamma = adjust_gamma(gray1, gamma)
-img2_gamma = adjust_gamma(gray2, gamma)
-# plt.figure(figsize=(16, 5))
-# plt.subplot(1, 2, 1)
-# plt.imshow(img1_gamma, cmap='gray')
-# plt.subplot(1, 2, 2)
-# plt.imshow(img2_gamma, cmap='gray')
-# plt.show()
+def show(image, is_gray=False):
+    plt.figure(figsize=(8, 5))
+    if is_gray:
+        plt.imshow(image, cmap='gray')
+    else:
+        plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    plt.show()
 
-img1_eq = cv2.equalizeHist(img1_gamma)
-img2_eq = cv2.equalizeHist(img2_gamma)
-# plt.figure(figsize=(16, 5))
-# plt.subplot(1, 2, 1)
-# plt.imshow(img1_gamma, cmap='gray')
-# plt.subplot(1, 2, 2)
-# plt.imshow(img2_gamma, cmap='gray')
-# plt.show()
+def extractionFeature(img):
+    # 特徴点の検出
+    akaze = cv2.AKAZE_create()
+    # 特徴点と記述子を検出
+    kp, des = akaze.detectAndCompute(img, None)
+    return (kp, des)
 
-# 特徴点の検出
-akaze = cv2.AKAZE_create()
+def matchImage(des1, des2):
+    # マッチャーの作成 (Brute Force Matcher)
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 
-# 特徴点と記述子を検出
-kp1, des1 = akaze.detectAndCompute(img1_gamma, None)
-kp2, des2 = akaze.detectAndCompute(img2_gamma, None)
+    # マッチングを実行
+    matches = bf.match(des1, des2)
+    matches = sorted(matches, key=lambda x: x.distance)
+    return (matches)
 
-# マッチャーの作成 (Brute Force Matcher)
-bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+def formatImage(img1, img2):
+    # 画像のリサイズ
+    height, width = img1.shape[:2]
+    img2 = cv2.resize(img2, (width, height))
 
-# マッチングを実行
-matches = bf.match(des1, des2)
-matches = sorted(matches, key=lambda x: x.distance)
+    # グレースケール
+    gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+    gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
 
-img_matches = cv2.drawMatches(img1_gamma, kp1, img2_gamma, kp2, matches, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+    # ガンマ補正
+    gamma = 1.5
+    img1_gamma = adjustGamma(gray1, gamma)
+    img2_gamma = adjustGamma(gray2, gamma)
 
-plt.figure(figsize=(16, 8))
-plt.imshow(img_matches)
-plt.show()
-# マッチング点の座標を抽出
-points1 = np.zeros((len(matches), 2), dtype=np.float32)
-points2 = np.zeros((len(matches), 2), dtype=np.float32)
+    return (img1_gamma, img2_gamma)
 
-for i, match in enumerate(matches):
-    points1[i, :] = kp1[match.queryIdx].pt
-    points2[i, :] = kp2[match.trainIdx].pt
+def main():
+    # 画像読み込み
+    img1 = cv2.imread('src/image3.png')
+    img2 = cv2.imread('src/image4.png')
 
-# ホモグラフィを計算
-H, _ = cv2.findHomography(points2, points1, cv2.RANSAC)
+    # 画像の前処理
+    img1_eq, img2_eq = formatImage(img1, img2)
 
-# 画像の変換
-transformed_img = cv2.warpPerspective(img2_gamma, H, (width, height))
+    # 特徴点を抽出
+    kp1, des1 = extractionFeature(img1_eq)
+    kp2, des2 = extractionFeature(img2_eq)
 
-# 画像を重ね合わせ
-combined_img = cv2.addWeighted(img1_gamma, 0.7, transformed_img, 0.5, 0)
+    # 画像のマッチング
+    matches = matchImage(des1, des2)
 
-# 結果をファイルに保存
-output_path = os.path.join('output', 'image.png')
-cv2.imwrite(output_path, combined_img)
+    # マッチング画像を表示
+    # img_matches = cv2.drawMatches(img1_eq, kp1, img2_eq, kp2, matches, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+    # show(img_matches, gray2, is_gray=True)
 
-# 保存した画像を読み込む
-output_img = cv2.imread('output/image.png', 0)
+    # マッチング点の座標を抽出
+    points1 = np.zeros((len(matches), 2), dtype=np.float32)
+    points2 = np.zeros((len(matches), 2), dtype=np.float32)
 
-# グレースケールしたgray2と比較する
-diff = cv2.absdiff(output_img, gray2)
+    for i, match in enumerate(matches):
+        points1[i, :] = kp1[match.queryIdx].pt
+        points2[i, :] = kp2[match.trainIdx].pt
 
-# plt.figure(figsize=(16, 5))
-# plt.subplot(1, 3, 1)
-# plt.imshow(gray2, cmap='gray')
-# plt.subplot(1, 3, 2)
-# plt.imshow(output_img, cmap='gray')
-# plt.subplot(1, 3, 3)
-# plt.imshow(diff, cmap='gray')
-# plt.show()
+    # ホモグラフィを計算
+    H, _ = cv2.findHomography(points2, points1, cv2.RANSAC)
 
-#  ガウシアンブラーの適応
-diff_blurred = cv2.GaussianBlur(diff, (5, 5), 0)
+    # 画像の変換
+    height, width = img1.shape[:2]
+    transformed_img = cv2.warpPerspective(img2_eq, H, (width, height))
 
-# 初期値を設定
-threshold = 100
+    # 画像を重ね合わせ
+    combined_img = cv2.addWeighted(img1_eq, 0.7, transformed_img, 0.3, 0)
 
-# コールバック関数
-def onTrackbar(position):
-    global threshold
-    threshold = position
-    _, mask = cv2.threshold(diff, threshold, 255, cv2.THRESH_BINARY)
-    cv2.imshow("Simple Threshold", mask)
+    # 結果をファイルに保存
+    output_path = os.path.join('output', 'image.png')
+    cv2.imwrite(output_path, combined_img)
 
-# ウィンドウを作成
-cv2.namedWindow("Simple Threshold")
+    # 保存した画像を読み込む
+    output_img = cv2.imread('output/image.png', 0)
+    # show(img1_eq)
+    # グレースケールしたgray2と比較する
+    diff = cv2.absdiff(output_img, img1_eq)
+    show(diff)
+    # # 比較後の画像の調整
+    # ##############################################
+    # # 明るくしてみる
+    # # diff_gmma = adjustGamma(diff, 2.0)
+    # # グレースケール画像でCLAHEを適用
+    # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    # clahe_image = clahe.apply(diff)
+    # # show(clahe_image)
+    # #  ガウシアンブラーの適応
+    # # diff_blurred = cv2.GaussianBlur(diff, (5, 5), 0)
+    # ##################################################
+    
+    # # 2値化
+    _, mask = cv2.threshold(diff, 48, 255, cv2.THRESH_BINARY)
+    show(mask)
+    # # クロージング
+    # # kernel = np.ones((5, 5), np.uint8)  # 5x5のカーネルを使用
+    # # mask_closed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
-# トラックバーを作成
-cv2.createTrackbar("Track", "Simple Threshold", threshold, 255, onTrackbar)
+    # # 結果を表示
+    # show(mask)
 
-# 初期の2値化結果を表示
-onTrackbar(threshold)
-
-# ループしてトラックバーの調整を待つ
-while True:
-    # Escキーを押すとループ終了
-    if cv2.waitKey(10) == 27:
-        break
-
-# ウィンドウを閉じる
-cv2.destroyAllWindows()
+main()
