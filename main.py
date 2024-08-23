@@ -42,12 +42,20 @@ def formatImage(img1, img2):
     gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
     gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
 
-    # ガンマ補正
-    gamma = 1.5
-    img1_gamma = adjustGamma(gray1, gamma)
-    img2_gamma = adjustGamma(gray2, gamma)
+    def trand_bar(x):
+        _, binary_img1 = cv2.threshold(gray1, x, 255, cv2.THRESH_BINARY)
+        cv2.imshow('Binary Image', binary_img1)
 
-    return (img1_gamma, img2_gamma)
+    # 画像の平滑化
+    blurred1 = cv2.bilateralFilter(gray1, 20, 22, 20)
+    blurred2 = cv2.bilateralFilter(gray2, 20, 22, 20)
+
+    # ガンマ補正
+    # gamma = 1.5
+    # img1_gamma = adjustGamma(gray1, gamma)
+    # img2_gamma = adjustGamma(gray2, gamma)
+
+    return (blurred1, blurred2)
 
 def main():
     # 画像読み込み
@@ -77,45 +85,40 @@ def main():
         points2[i, :] = kp2[match.trainIdx].pt
 
     # ホモグラフィを計算
-    H, _ = cv2.findHomography(points2, points1, cv2.RANSAC)
+    H, _ = cv2.findHomography(points1, points2, cv2.RANSAC)
 
     # 画像の変換
-    height, width = img1.shape[:2]
-    transformed_img = cv2.warpPerspective(img2_eq, H, (width, height))
-
+    height, width = img2_eq.shape[:2]
+    transformed_img = cv2.warpPerspective(img1_eq, H, (width, height))
+    show(transformed_img)
     # 画像を重ね合わせ
-    combined_img = cv2.addWeighted(img1_eq, 0.7, transformed_img, 0.3, 0)
+    # combined_img = cv2.addWeighted(img2_eq, 0.3, transformed_img, 0.7, 0)
 
     # 結果をファイルに保存
     output_path = os.path.join('output', 'image.png')
-    cv2.imwrite(output_path, combined_img)
+    cv2.imwrite(output_path, transformed_img)
 
     # 保存した画像を読み込む
     output_img = cv2.imread('output/image.png', 0)
-    # show(img1_eq)
-    # グレースケールしたgray2と比較する
-    diff = cv2.absdiff(output_img, img1_eq)
-    show(diff)
-    # # 比較後の画像の調整
-    # ##############################################
-    # # 明るくしてみる
-    # # diff_gmma = adjustGamma(diff, 2.0)
-    # # グレースケール画像でCLAHEを適用
-    # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    # clahe_image = clahe.apply(diff)
-    # # show(clahe_image)
-    # #  ガウシアンブラーの適応
-    # # diff_blurred = cv2.GaussianBlur(diff, (5, 5), 0)
-    # ##################################################
+
+    # show(output_img)
+    def adjust_threshold(x):
+        _, binary_img1 = cv2.threshold(output_img, x, 255, cv2.THRESH_BINARY)
+        cv2.imshow('Binary Image', binary_img1)
+        # ウィンドウを作成
+    cv2.namedWindow('Binary Image')
+
+    # トラックバーを作成
+    cv2.createTrackbar('Threshold', 'Binary Image', 150, 255, adjust_threshold)
+
+    # 初期状態の二値化画像を表示
+    adjust_threshold(150)
+
+    # キー入力待ち
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
     
     # # 2値化
     _, mask = cv2.threshold(diff, 48, 255, cv2.THRESH_BINARY)
-    show(mask)
-    # # クロージング
-    # # kernel = np.ones((5, 5), np.uint8)  # 5x5のカーネルを使用
-    # # mask_closed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-
-    # # 結果を表示
-    # show(mask)
 
 main()
