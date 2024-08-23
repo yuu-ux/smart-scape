@@ -31,15 +31,11 @@ def formatImage(img1, img2):
     gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
     gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
 
-    # # 画像の平滑化
-    # blurred1 = cv2.bilateralFilter(gray1, 20, 22, 20)
-    # blurred2 = cv2.bilateralFilter(gray2, 20, 22, 20)
+    # 画像の平滑化
+    blurred1 = cv2.bilateralFilter(gray1, 20, 22, 20)
+    blurred2 = cv2.bilateralFilter(gray2, 20, 22, 20)
 
-    # # ガウシアンブラーを適応
-    # gray1 = cv2.GaussianBlur(gray1, (5, 5), 0)
-    # gray2 = cv2.GaussianBlur(gray2, (5, 5), 0)
-
-    return (gray1, gray2)
+    return (blurred1, blurred2)
 
 def matchImage(img1, img2):
     # 特徴点の検出
@@ -56,10 +52,10 @@ def matchImage(img1, img2):
     matches = bf.match(des1, des2)
     matches = sorted(matches, key=lambda x: x.distance)
 
-    # マッチング点の座標を抽出
+    # 特徴点の座標を格納する配列の初期化
     points1 = np.zeros((len(matches), 2), dtype=np.float32)
     points2 = np.zeros((len(matches), 2), dtype=np.float32)
-
+    # 特徴点の座標を格納
     for i, match in enumerate(matches):
         points1[i, :] = kp1[match.queryIdx].pt
         points2[i, :] = kp2[match.trainIdx].pt
@@ -70,7 +66,6 @@ def matchImage(img1, img2):
     # 画像のスケールを変更する
     height, width = img2.shape[:2]
     transformedImg = cv2.warpPerspective(img1, H, (width, height))
-
     return (transformedImg, H)
 
 def processImage(img1, img2):
@@ -83,7 +78,6 @@ def processImage(img1, img2):
     equalizedImg1 = clahe.apply(blurredImg1)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     equalizedImg2 = clahe.apply(blurredImg2)
-
     return (equalizedImg1, equalizedImg2)
     
 def combineOriginal(img1, img2, H):
