@@ -37,7 +37,7 @@ def formatImage(img1, img2):
     # 画像の平滑化
     blurred1 = cv2.bilateralFilter(gray1, 20, 22, 20)
     blurred2 = cv2.bilateralFilter(gray2, 20, 22, 20)
-
+    
     # 画像を保存
     cv2.imwrite('output/formatedImg1.png', blurred1)
     return (blurred1, blurred2)
