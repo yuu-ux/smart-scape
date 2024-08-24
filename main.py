@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def main():
+    # img1 = cv2.imread('src/image1.png')
+    # img2 = cv2.imread('src/image2.png')
     img1 = cv2.imread('src/image3.png')
     img2 = cv2.imread('src/image4.png')
 
@@ -18,6 +20,7 @@ def main():
     # 画像の比較・2値化
     diffImg = cv2.absdiff(processedImg1, processedImg2)
     _, binaryImg = cv2.threshold(diffImg, 50, 255, cv2.THRESH_BINARY)
+    cv2.imwrite('output/binaryImg.png', binaryImg)
 
     # オリジナル画像と差異を組み合わせる
     combineOriginal(img1, binaryImg, H)
@@ -35,6 +38,8 @@ def formatImage(img1, img2):
     blurred1 = cv2.bilateralFilter(gray1, 20, 22, 20)
     blurred2 = cv2.bilateralFilter(gray2, 20, 22, 20)
 
+    # 画像を保存
+    cv2.imwrite('output/formatedImg1.png', blurred1)
     return (blurred1, blurred2)
 
 def matchImage(img1, img2):
@@ -52,9 +57,16 @@ def matchImage(img1, img2):
     matches = bf.match(des1, des2)
     matches = sorted(matches, key=lambda x: x.distance)
 
+    # マッチング結果を描画
+    matchedImg = cv2.drawMatches(img1, kp1, img2, kp2, matches[:10], None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+
+    # マッチング結果を保存
+    cv2.imwrite('output/matchedImg.png', matchedImg)
+
     # 特徴点の座標を格納する配列の初期化
     points1 = np.zeros((len(matches), 2), dtype=np.float32)
     points2 = np.zeros((len(matches), 2), dtype=np.float32)
+
     # 特徴点の座標を格納
     for i, match in enumerate(matches):
         points1[i, :] = kp1[match.queryIdx].pt
